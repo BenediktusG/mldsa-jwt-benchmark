@@ -46,10 +46,10 @@ go run ./cmd/server -config config/config.json -keys keys
 
 ## Menjalankan matriks 240 pelaksanaan
 
-Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(0,8)` dan `(1,9)` telah diverifikasi berada pada dua Performance Core:
+Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
 
 ```sh
-go run ./cmd/experiment run --server-cpus 0,8,1,9
+go run ./cmd/experiment run --server-cpus 1,2,3,4
 ```
 
 Penjadwal memvalidasi bahwa alokasi server berisi tepat empat CPU logis, terbagi sebagai dua thread pada masing-masing dua core fisik. Pemeriksaan jenis Performance Core tetap memerlukan verifikasi topologi perangkat. `compose.yaml` membatasi server ke empat thread tersebut, memori 1 GB, dan `GOMAXPROCS=4`. k6 tidak diberi batas afinitas CPU oleh penjadwal sehingga dapat memakai semua CPU yang tersedia bagi proses pada mesin inang. Penjadwal membangun kontainer satu kali, lalu membuat ulang proses untuk setiap pelaksanaan. Ia menghentikan kontainer setelah k6 selesai, tanpa jeda tetap. Jika pelaksanaan gagal atau menghasilkan nol keberhasilan, penjadwal berhenti agar penyebabnya ditinjau.
