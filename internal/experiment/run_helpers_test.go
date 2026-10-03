@@ -25,24 +25,24 @@ func TestTokenInfo(t *testing.T) {
 	}
 }
 
-func TestCountSuccesses(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "results.csv")
-	contents := "metric_value,metric_name,extra_tags\n1,successful_in_window,a=b\n10,successful_duration_ms,a=b\n1,successful_in_window,a=b\n"
+func TestReadMetricSummary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "results.metrics.json")
+	contents := `{"schema_version":1,"run_id":"r1","alg":"ES256","operation":"issue","target_vu":1,"successful_in_window":2,"successful_started_in_window":3,"mean_ms":10,"p99_ms":20}`
 	if err := os.WriteFile(path, []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
-	count, err := countSuccesses(path)
+	summary, err := ReadMetricSummary(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if count != 2 {
-		t.Fatalf("count = %d, want 2", count)
+	if summary.SuccessfulInWindow != 2 || summary.SuccessfulStartedInWindow != 3 || summary.MeanMS == nil || *summary.MeanMS != 10 {
+		t.Fatalf("unexpected summary: %+v", summary)
 	}
-	if err := os.WriteFile(path, []byte("metric_value\n1\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(`{"schema_version":1}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := countSuccesses(path); err == nil {
-		t.Fatal("CSV without metric_name was accepted")
+	if _, err := ReadMetricSummary(path); err == nil {
+		t.Fatal("invalid metric summary was accepted")
 	}
 }
 

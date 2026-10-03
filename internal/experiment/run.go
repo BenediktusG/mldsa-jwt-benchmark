@@ -5,11 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"os/exec"
@@ -47,6 +47,18 @@ type RunMetadata struct {
 	PayloadBytes       int               `json:"payload_bytes"`
 	JWTBytes           int               `json:"jwt_bytes"`
 	SuccessfulInWindow int               `json:"successful_in_window"`
+}
+
+type MetricSummary struct {
+	SchemaVersion             int      `json:"schema_version"`
+	RunID                     string   `json:"run_id"`
+	Alg                       string   `json:"alg"`
+	Operation                 string   `json:"operation"`
+	TargetVU                  int      `json:"target_vu"`
+	SuccessfulInWindow        int      `json:"successful_in_window"`
+	SuccessfulStartedInWindow int      `json:"successful_started_in_window"`
+	MeanMS                    *float64 `json:"mean_ms"`
+	P99MS                     *float64 `json:"p99_ms"`
 }
 
 func utcNow() string { return time.Now().UTC().Format(time.RFC3339Nano) }
@@ -280,41 +292,40 @@ func prepare(client *http.Client, base string, run Scenario, config profile.Conf
 	return nil, 0, 0, 0, errors.New("prepared tokens have insufficient remaining lifetime")
 }
 
-func countSuccesses(path string) (int, error) {
+func ReadMetricSummary(path string) (MetricSummary, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, err
+		return MetricSummary{}, err
 	}
 	defer f.Close()
-	r := csv.NewReader(f)
-	r.FieldsPerRecord = -1
-	header, err := r.Read()
-	if err != nil {
-		return 0, err
+	decoder := json.NewDecoder(io.LimitReader(f, 64*1024))
+	decoder.DisallowUnknownFields()
+	var summary MetricSummary
+	if err := decoder.Decode(&summary); err != nil {
+		return MetricSummary{}, err
 	}
-	metricColumn := -1
-	for index, name := range header {
-		if name == "metric_name" {
-			metricColumn = index
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return MetricSummary{}, errors.New("metric summary contains trailing data")
+	}
+	if summary.SchemaVersion != 1 || summary.RunID == "" || summary.Alg == "" ||
+		summary.Operation == "" || summary.TargetVU < 1 || summary.SuccessfulInWindow < 0 ||
+		summary.SuccessfulStartedInWindow < summary.SuccessfulInWindow {
+		return MetricSummary{}, errors.New("invalid metric summary")
+	}
+	if summary.SuccessfulStartedInWindow == 0 {
+		if summary.MeanMS != nil || summary.P99MS != nil {
+			return MetricSummary{}, errors.New("empty metric summary contains latency values")
+		}
+	} else if summary.MeanMS == nil || summary.P99MS == nil {
+		return MetricSummary{}, errors.New("metric summary is missing latency values")
+	}
+	for _, value := range []*float64{summary.MeanMS, summary.P99MS} {
+		if value != nil && (*value < 0 || math.IsNaN(*value) || math.IsInf(*value, 0)) {
+			return MetricSummary{}, errors.New("metric summary contains invalid latency")
 		}
 	}
-	if metricColumn < 0 {
-		return 0, errors.New("k6 CSV missing metric_name")
-	}
-	count := 0
-	for {
-		row, err := r.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		if metricColumn < len(row) && row[metricColumn] == "successful_in_window" {
-			count++
-		}
-	}
-	return count, nil
+	return summary, nil
 }
 
 func parsePhases(path string) (map[string]int64, error) {
@@ -376,10 +387,10 @@ func runOne(options RunOptions, plan Plan, index int, config profile.Config, env
 	if err := os.MkdirAll(rawDir, 0755); err != nil {
 		return "", err
 	}
-	csvPath := filepath.Join(rawDir, runID+".csv")
+	metricsPath := filepath.Join(rawDir, runID+".metrics.json")
 	logPath := filepath.Join(rawDir, runID+".log")
 	metadataPath := filepath.Join(rawDir, runID+".json")
-	for _, path := range []string{csvPath, logPath, metadataPath} {
+	for _, path := range []string{metricsPath, logPath, metadataPath} {
 		if _, err := os.Stat(path); err == nil {
 			return "", fmt.Errorf("raw file already exists: %s", path)
 		} else if !errors.Is(err, os.ErrNotExist) {
@@ -428,9 +439,9 @@ func runOne(options RunOptions, plan Plan, index int, config profile.Config, env
 		}
 		k6Env := append(os.Environ(),
 			"ALG="+row.Alg, "OPERATION="+row.Operation, "TARGET_VU="+strconv.Itoa(row.TargetVU),
-			"RUN_ID="+runID, "BASE_URL="+options.BaseURL, "TOKENS_FILE="+tokenFile.Name(),
+			"RUN_ID="+runID, "BASE_URL="+options.BaseURL, "TOKENS_FILE="+tokenFile.Name(), "METRICS_PATH="+metricsPath,
 			"SUBJECT_PREFIX="+config.SubjectPrefix, "SUBJECT_WIDTH="+strconv.Itoa(config.SubjectWidth))
-		k6Err := runCommand(options.Root, k6Env, logFile, "k6", "run", "--quiet", "--log-format", "raw", "--out", "csv="+csvPath, "load/scenario.js")
+		k6Err := runCommand(options.Root, k6Env, logFile, "k6", "run", "--quiet", "--log-format", "raw", "load/scenario.js")
 		if err := logFile.Close(); err != nil && k6Err == nil {
 			k6Err = err
 		}
@@ -449,11 +460,16 @@ func runOne(options RunOptions, plan Plan, index int, config profile.Config, env
 			runErr = err
 			return
 		}
-		metadata.SuccessfulInWindow, err = countSuccesses(csvPath)
+		metrics, err := ReadMetricSummary(metricsPath)
 		if err != nil {
 			runErr = err
 			return
 		}
+		if metrics.RunID != runID || metrics.Alg != row.Alg || metrics.Operation != row.Operation || metrics.TargetVU != row.TargetVU {
+			runErr = errors.New("metric summary does not match scenario")
+			return
+		}
+		metadata.SuccessfulInWindow = metrics.SuccessfulInWindow
 		if k6Err != nil {
 			runErr = fmt.Errorf("k6 failed: %w", k6Err)
 			return

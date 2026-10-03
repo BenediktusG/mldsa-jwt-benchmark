@@ -82,7 +82,7 @@ func run() error {
 	commands := [][]string{
 		{"go", "test", "-race", "./..."},
 		{"go", "vet", "./..."},
-		{"k6", "inspect", "-e", "ALG=ES256", "-e", "OPERATION=issue", "-e", "TARGET_VU=1", "-e", "RUN_ID=validation", "load/scenario.js"},
+		{"k6", "inspect", "-e", "ALG=ES256", "-e", "OPERATION=issue", "-e", "TARGET_VU=1", "-e", "RUN_ID=validation", "-e", "METRICS_PATH=results/validation/inspect.metrics.json", "load/scenario.js"},
 	}
 	failed := false
 	for _, command := range commands {

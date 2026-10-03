@@ -6,12 +6,14 @@ const operation = __ENV.OPERATION;
 const base = __ENV.BASE_URL;
 const runId = __ENV.RUN_ID;
 const token = __ENV.TOKEN;
+const metricsPath = __ENV.METRICS_PATH;
 
-if (!alg || !base || !runId || !['issue', 'verify'].includes(operation) || (operation === 'verify' && !token)) {
+if (!alg || !base || !runId || !metricsPath || !['issue', 'verify'].includes(operation) || (operation === 'verify' && !token)) {
   throw new Error('invalid smoke-test configuration');
 }
 
 export const successfulInWindow = new Counter('successful_in_window');
+export const successfulStartedInWindow = new Counter('successful_started_in_window');
 export const successfulDuration = new Trend('successful_duration_ms', true);
 
 export const options = {
@@ -19,6 +21,7 @@ export const options = {
   iterations: 1,
   discardResponseBodies: false,
   thresholds: {},
+  summaryTrendStats: ['avg', 'p(99)'],
 };
 
 export default function () {
@@ -54,16 +57,24 @@ export default function () {
   }
   if (!success) throw new Error(`smoke request failed with HTTP ${response.status}`);
 
-  const tags = {
-    run_id: runId,
-    alg,
-    operation,
-    target_vu: '1',
-    start_ms: String(start),
-    end_ms: String(end),
-    measure_start_ms: String(measureStart),
-    measure_end_ms: String(measureEnd),
+  successfulStartedInWindow.add(1);
+  successfulDuration.add(end - start);
+  successfulInWindow.add(1);
+}
+
+export function handleSummary(data) {
+  const duration = data.metrics.successful_duration_ms?.values || {};
+  return {
+    [metricsPath]: `${JSON.stringify({
+      schema_version: 1,
+      run_id: runId,
+      alg,
+      operation,
+      target_vu: 1,
+      successful_in_window: data.metrics.successful_in_window?.values.count || 0,
+      successful_started_in_window: data.metrics.successful_started_in_window?.values.count || 0,
+      mean_ms: duration.avg ?? null,
+      p99_ms: duration['p(99)'] ?? null,
+    }, null, 2)}\n`,
   };
-  successfulDuration.add(end - start, tags);
-  successfulInWindow.add(1, tags);
 }

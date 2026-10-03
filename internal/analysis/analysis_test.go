@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"math"
 	"os"
@@ -12,18 +11,14 @@ import (
 	"mldsa-jwt-benchmark/internal/experiment"
 )
 
-func writeFixture(t *testing.T, rows [][]string) string {
+func writeFixture(t *testing.T, summary experiment.MetricSummary) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "run.csv")
-	f, err := os.Create(path)
+	path := filepath.Join(t.TempDir(), "run.metrics.json")
+	b, err := json.Marshal(summary)
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := csv.NewWriter(f)
-	if err := w.WriteAll(append([][]string{{"metric_name", "metric_value", "extra_tags"}}, rows...)); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
+	if err := os.WriteFile(path, b, 0644); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -35,12 +30,9 @@ func TestPhaseSelectionAndSummary(t *testing.T) {
 		Scenario: experiment.Scenario{Round: 1, Alg: "ES256", Operation: "issue", TargetVU: 1},
 		Phases:   map[string]int64{"measure_start_ms": 15000, "measure_end_ms": 75000, "grace_end_ms": 105000},
 	}
-	common := "run_id=r1&alg=ES256&operation=issue&target_vu=1&measure_start_ms=15000&measure_end_ms=75000"
-	path := writeFixture(t, [][]string{
-		{"successful_duration_ms", "10", common + "&start_ms=20000&end_ms=20010"},
-		{"successful_in_window", "1", common + "&start_ms=20000&end_ms=20010"},
-		{"successful_duration_ms", "20", common + "&start_ms=74990&end_ms=75010"},
-		{"http_req_duration", "100", ""},
+	path := writeFixture(t, experiment.MetricSummary{
+		SchemaVersion: 1, RunID: "r1", Alg: "ES256", Operation: "issue", TargetVU: 1,
+		SuccessfulInWindow: 1, SuccessfulStartedInWindow: 2, MeanMS: ptr(15), P99MS: ptr(19.9),
 	})
 	run, err := CalculateRun(path, metadata)
 	if err != nil {
@@ -61,19 +53,17 @@ func TestPhaseSelectionAndSummary(t *testing.T) {
 	}
 }
 
-func TestEmptySamplesAndInvalidBoundary(t *testing.T) {
-	if Percentile99(nil) != nil {
-		t.Fatal("P99 should be unavailable without samples")
-	}
+func TestMetricSummaryMismatch(t *testing.T) {
 	metadata := experiment.RunMetadata{
 		RunID: "r1", Scenario: experiment.Scenario{Round: 1, Alg: "ES256", Operation: "issue", TargetVU: 1},
 		Phases: map[string]int64{"measure_start_ms": 15000, "measure_end_ms": 75000, "grace_end_ms": 105000},
 	}
-	path := writeFixture(t, [][]string{{"successful_in_window", "1", strings.Join([]string{
-		"run_id=r1", "alg=ES256", "operation=issue", "target_vu=1", "measure_start_ms=15000", "measure_end_ms=75000", "start_ms=74990", "end_ms=75010",
-	}, "&")}})
+	path := writeFixture(t, experiment.MetricSummary{
+		SchemaVersion: 1, RunID: "another-run", Alg: "ES256", Operation: "issue", TargetVU: 1,
+		SuccessfulInWindow: 1, SuccessfulStartedInWindow: 1, MeanMS: ptr(10), P99MS: ptr(10),
+	})
 	if _, err := CalculateRun(path, metadata); err == nil {
-		t.Fatal("counter completed after the measurement window was accepted")
+		t.Fatal("metric summary for another run was accepted")
 	}
 }
 
@@ -119,13 +109,15 @@ func TestProcessWritesReports(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(raw, "r1.json"), b, 0644); err != nil {
 		t.Fatal(err)
 	}
-	common := "run_id=r1&alg=ES256&operation=issue&target_vu=1&measure_start_ms=15000&measure_end_ms=75000&start_ms=20000&end_ms=20010"
-	fixture := writeFixture(t, [][]string{{"successful_duration_ms", "10", common}, {"successful_in_window", "1", common}})
-	csvBytes, err := os.ReadFile(fixture)
+	fixture := writeFixture(t, experiment.MetricSummary{
+		SchemaVersion: 1, RunID: "r1", Alg: "ES256", Operation: "issue", TargetVU: 1,
+		SuccessfulInWindow: 1, SuccessfulStartedInWindow: 1, MeanMS: ptr(10), P99MS: ptr(10),
+	})
+	metricBytes, err := os.ReadFile(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(raw, "r1.csv"), csvBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(raw, "r1.metrics.json"), metricBytes, 0644); err != nil {
 		t.Fatal(err)
 	}
 	result, err := Process(Options{Raw: raw, Out: out, Exclusions: filepath.Join(root, "exclusions.json")})

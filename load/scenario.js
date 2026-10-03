@@ -6,16 +6,18 @@ const alg = __ENV.ALG;
 const operation = __ENV.OPERATION;
 const target = Number(__ENV.TARGET_VU);
 const runId = __ENV.RUN_ID;
+const metricsPath = __ENV.METRICS_PATH;
 const base = __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const subjectPrefix = __ENV.SUBJECT_PREFIX || 'vu-';
 const subjectWidth = Number(__ENV.SUBJECT_WIDTH || '4');
 const tokens = operation === 'verify' ? JSON.parse(open(__ENV.TOKENS_FILE)) : null;
 
-if (!['issue', 'verify'].includes(operation) || ![1, 10, 100, 1000].includes(target) || !alg || !runId || (tokens && tokens.length !== target)) {
+if (!['issue', 'verify'].includes(operation) || ![1, 10, 100, 1000].includes(target) || !alg || !runId || !metricsPath || (tokens && tokens.length !== target)) {
   throw new Error('invalid scenario configuration');
 }
 
 export const successfulInWindow = new Counter('successful_in_window');
+export const successfulStartedInWindow = new Counter('successful_started_in_window');
 export const successfulDuration = new Trend('successful_duration_ms', true);
 
 export const options = {
@@ -70,9 +72,27 @@ export default function () {
         : body.status === 'success';
     } catch (_) { success = false; }
   }
-  const tags = { run_id: runId, alg, operation, target_vu: String(target), start_ms: String(start), end_ms: String(end), measure_start_ms: String(measureStart), measure_end_ms: String(measureEnd) };
   if (success && start >= measureStart && start < measureEnd) {
-    successfulDuration.add(end - start, tags);
-    if (end < measureEnd) successfulInWindow.add(1, tags);
+    successfulStartedInWindow.add(1);
+    successfulDuration.add(end - start);
+    if (end < measureEnd) successfulInWindow.add(1);
   }
+}
+
+export function handleSummary(data) {
+  const completed = data.metrics.successful_in_window?.values.count || 0;
+  const started = data.metrics.successful_started_in_window?.values.count || 0;
+  const duration = data.metrics.successful_duration_ms?.values || {};
+  const artifact = {
+    schema_version: 1,
+    run_id: runId,
+    alg,
+    operation,
+    target_vu: target,
+    successful_in_window: completed,
+    successful_started_in_window: started,
+    mean_ms: duration.avg ?? null,
+    p99_ms: duration['p(99)'] ?? null,
+  };
+  return { [metricsPath]: `${JSON.stringify(artifact, null, 2)}\n` };
 }

@@ -15,7 +15,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	raw := flag.String("raw", filepath.Join(root, "results/raw"), "original k6 CSV and metadata directory")
+	raw := flag.String("raw", filepath.Join(root, "results/raw"), "k6 metric summaries and run metadata directory")
 	out := flag.String("out", filepath.Join(root, "results/processed"), "reproducible output directory")
 	exclusions := flag.String("exclusions", filepath.Join(root, "runner/exclusions.json"), "documented exclusion map")
 	flag.Parse()

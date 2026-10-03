@@ -8,9 +8,9 @@ Proyek ini mengimplementasikan layanan HTTP stateless untuk ES256, ES384, ES512,
 - `cmd/keygen`, `config/`, `keys/`: profil tetap dan enam pasangan kunci lokal. Berkas di `keys/` tidak boleh dipublikasikan.
 - `load/scenario.js`: fase k6 15 detik ramp-up, 60 detik pengukuran, dan maksimal 30 detik penyelesaian.
 - `runner/schedule.json`, `cmd/experiment`, `internal/experiment`: urutan berurutan 240 pelaksanaan dan orkestrasi Docker/k6 dalam Go.
-- `cmd/analyze`, `internal/analysis`: perhitungan ulang CSV mentah, tabel, perbandingan, dan SVG dalam Go.
+- `cmd/analyze`, `internal/analysis`: validasi ringkasan metrik per pelaksanaan, tabel, perbandingan, dan SVG dalam Go.
 - `cmd/validate`: validasi dan pencatatan hasil pemeriksaan dalam Go.
-- `results/raw/`: CSV k6, log, serta metadata asli per pelaksanaan; `results/processed/`: keluaran yang dapat dibuat ulang.
+- `results/raw/`: ringkasan metrik k6, log kecil, serta metadata asli per pelaksanaan; `results/processed/`: keluaran yang dapat dibuat ulang.
 
 ## Menjalankan server dan validasi
 
@@ -25,7 +25,7 @@ Perintah tersebut menolak berkas kunci yang sudah ada agar pasangan kunci peneli
 ```sh
 go test -race ./...
 go vet ./...
-k6 inspect -e ALG=ES256 -e OPERATION=issue -e TARGET_VU=1 -e RUN_ID=inspect load/scenario.js
+k6 inspect -e ALG=ES256 -e OPERATION=issue -e TARGET_VU=1 -e RUN_ID=inspect -e METRICS_PATH=results/validation/inspect.metrics.json load/scenario.js
 ```
 
 `go run ./cmd/validate` menjalankan ketiga pemeriksaan tersebut dan menyimpan hasil beserta hash kode dan konfigurasi di `results/validation/`.
@@ -56,7 +56,7 @@ CPU server wajib masuk dalam set isolasi domain penjadwal kernel dan dikeluarkan
 
 Penjadwal memvalidasi bahwa alokasi server berisi tepat empat CPU logis, terbagi sebagai dua thread pada masing-masing dua core fisik. Pemeriksaan jenis Performance Core tetap memerlukan verifikasi topologi perangkat. `compose.yaml` membatasi server ke empat thread tersebut, memori 1 GB, dan `GOMAXPROCS=4`. k6 tidak diberi batas afinitas CPU oleh penjadwal sehingga dapat memakai semua CPU yang tersedia bagi proses pada mesin inang. Penjadwal membangun kontainer satu kali, lalu membuat ulang proses untuk setiap pelaksanaan. Ia menghentikan kontainer setelah k6 selesai, tanpa jeda tetap. Jika pelaksanaan gagal atau menghasilkan nol keberhasilan, penjadwal berhenti agar penyebabnya ditinjau.
 
-Untuk melanjutkan bagian tertentu dari jadwal, pakai `--start-index` (mulai dari 0) dan `--limit`. Jangan menimpa CSV mentah. Jika suatu pelaksanaan harus dikeluarkan, buat `runner/exclusions.json` sebagai objek `{"run_id":"alasan terdokumentasi"}`, lalu jalankan ulang indeks yang sama. Analisis menolak dua pelaksanaan sah pada indeks jadwal yang sama. Nilai rendah karena beban sistem bukan alasan pengeluaran.
+Untuk melanjutkan bagian tertentu dari jadwal, pakai `--start-index` (mulai dari 0) dan `--limit`. Jangan menimpa artefak mentah. Jika suatu pelaksanaan harus dikeluarkan, buat `runner/exclusions.json` sebagai objek `{"run_id":"alasan terdokumentasi"}`, lalu jalankan ulang indeks yang sama. Analisis menolak dua pelaksanaan sah pada indeks jadwal yang sama. Nilai rendah karena beban sistem bukan alasan pengeluaran.
 
 Jadwal memakai urutan tetap: algoritma, operasi, target VU `1`, `10`, `100`, dan `1000`, lalu putaran `1` sampai `5`. Dengan demikian, setiap skenario dijalankan lima kali secara berurutan sebelum beralih ke skenario berikutnya. Jadwal tidak menggunakan seed atau pengacakan. Untuk membuat berkas jadwal baru, jalankan `go run ./cmd/experiment plan --output <berkas-baru>`, lalu pasang `--schedule <berkas-baru>` saat menjalankan.
 
@@ -68,9 +68,9 @@ go run ./cmd/analyze
 
 `per_run.csv` memuat throughput, mean, dan P99 setiap pelaksanaan. `summary.csv` memuat rata-rata, simpangan baku sampel, koefisien variasi, dan jumlah nilai tersedia. `comparison.csv` memuat pasangan ML-DSA terhadap ECDSA dengan selisih relatif terhadap ECDSA. `exclusions.csv` memuat alasan pengeluaran yang dicatat. Enam grafik SVG memisahkan operasi dan metrik, memakai sumbu VU logaritmik dan error bar simpangan baku antar-pengulangan.
 
-Throughput menghitung keberhasilan yang **dimulai dan selesai** dalam jendela 60 detik, dibagi 60. Mean dan P99 memakai keberhasilan yang **dimulai** dalam jendela; respons yang selesai saat fase penyelesaian tetap masuk. P99 menggunakan interpolasi linear tipe 7 pada sampel satu pelaksanaan sebelum hasil antarpelaksanaan diringkas. Permintaan gagal tetap ada dalam CSV mentah, tetapi tidak masuk tiga metrik utama. Sampel k6 menyimpan waktu mulai/selesai sebagai tag `start_ms`/`end_ms` di kolom `extra_tags`, sehingga aturan batas waktu dapat diaudit.
+Throughput menghitung keberhasilan yang **dimulai dan selesai** dalam jendela 60 detik, dibagi 60. Mean dan P99 memakai keberhasilan yang **dimulai** dalam jendela; respons yang selesai saat fase penyelesaian tetap masuk. k6 menghitung mean dan P99 pada akhir setiap pelaksanaan, lalu menyimpan hanya jumlah keberhasilan dan kedua ringkasan latensi dalam berkas `.metrics.json`. Pendekatan ini menghindari CSV deret waktu yang sangat besar; permintaan gagal tidak masuk tiga metrik utama.
 
-Metadata merekam versi alat, hash sumber dan konfigurasi, ID image Docker server, topologi CPU, profil daya bila tersedia, alokasi sumber daya, ukuran JWT/payload, jumlah token persiapan, batas fase, dan jumlah sukses. Sebelum setiap pelaksanaan, runner memastikan ID image server serta berkas host yang masih digunakan saat runtime (`compose.yaml`, `load/scenario.js`, jadwal, dan kunci yang di-mount) tidak berubah. Kode Go yang sudah dikompilasi ke dalam image tidak di-hash ulang pada setiap pelaksanaan. Identitas JWT dan kunci privat tidak ditulis ke metadata atau CSV. Berkas token persiapan dibuat sementara dengan izin `0600` dan dihapus setelah k6 selesai.
+Metadata merekam versi alat, hash sumber dan konfigurasi, ID image Docker server, topologi CPU, profil daya bila tersedia, alokasi sumber daya, ukuran JWT/payload, jumlah token persiapan, batas fase, dan jumlah sukses. Sebelum setiap pelaksanaan, runner memastikan ID image server serta berkas host yang masih digunakan saat runtime (`compose.yaml`, `load/scenario.js`, jadwal, dan kunci yang di-mount) tidak berubah. Kode Go yang sudah dikompilasi ke dalam image tidak di-hash ulang pada setiap pelaksanaan. Identitas JWT dan kunci privat tidak ditulis ke metadata atau ringkasan metrik. Berkas token persiapan dibuat sementara dengan izin `0600` dan dihapus setelah k6 selesai.
 
 ## Batas pelaksanaan saat penyusunan
 

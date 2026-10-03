@@ -102,15 +102,15 @@ func TestDockerK6AnalysisSmoke(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		csvPath := filepath.Join(rawDir, runID+".csv")
+		metricsPath := filepath.Join(rawDir, runID+".metrics.json")
 		logPath := filepath.Join(rawDir, runID+".log")
 		logFile, err := os.Create(logPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		args := []string{"run", "--quiet", "--log-format", "raw", "--out", "csv=" + csvPath,
+		args := []string{"run", "--quiet", "--log-format", "raw",
 			"-e", "ALG=ES256", "-e", "OPERATION=" + operation, "-e", "RUN_ID=" + runID,
-			"-e", "BASE_URL=" + baseURL}
+			"-e", "BASE_URL=" + baseURL, "-e", "METRICS_PATH=" + metricsPath}
 		if operation == "verify" {
 			args = append(args, "-e", "TOKEN="+token)
 		}
@@ -131,12 +131,12 @@ func TestDockerK6AnalysisSmoke(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		successes, err := countSuccesses(csvPath)
+		metrics, err := ReadMetricSummary(metricsPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if successes != 1 {
-			t.Fatalf("%s successes = %d, want 1", operation, successes)
+		if metrics.SuccessfulInWindow != 1 || metrics.SuccessfulStartedInWindow != 1 {
+			t.Fatalf("%s metric summary is unexpected: %+v", operation, metrics)
 		}
 		metadata := RunMetadata{
 			RunID: runID, ScheduleIndex: index,
@@ -148,7 +148,7 @@ func TestDockerK6AnalysisSmoke(t *testing.T) {
 			PayloadBytes:       payloadBytes,
 			JWTBytes:           jwtBytes,
 			EarliestTokenExp:   expiration,
-			SuccessfulInWindow: successes,
+			SuccessfulInWindow: metrics.SuccessfulInWindow,
 		}
 		encoded, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
