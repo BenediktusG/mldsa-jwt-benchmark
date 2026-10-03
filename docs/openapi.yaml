@@ -1,0 +1,233 @@
+openapi: 3.1.0
+info:
+  title: ML-DSA JWT Benchmark API
+  version: 1.0.0
+  description: |
+    HTTP API used by the ML-DSA and ECDSA JWT benchmark.
+
+    The documented subject format and server address reflect the default
+    `config/config.json` configuration. A token must be verified using the
+    same `alg` value with which it was issued.
+servers:
+  - url: http://localhost:8080
+    description: Local server
+tags:
+  - name: Health
+    description: Service readiness
+  - name: Tokens
+    description: JWT issuance and verification
+paths:
+  /healthz:
+    get:
+      tags:
+        - Health
+      summary: Check service readiness
+      operationId: getHealth
+      responses:
+        "200":
+          description: The service is ready.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ready
+  /token:
+    post:
+      tags:
+        - Tokens
+      summary: Issue a signed JWT
+      description: |
+        Issues a JWT for a configured benchmark subject. The request must use
+        `Content-Type: application/json`, may not exceed 1,024 bytes, and may
+        not contain unknown or duplicate JSON fields.
+      operationId: issueToken
+      parameters:
+        - $ref: "#/components/parameters/Algorithm"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IssueTokenRequest"
+            example:
+              sub: vu-0001
+      responses:
+        "200":
+          description: The JWT was issued successfully.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+              example:
+                token: eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJza3JpcHNpLWp3dC1leHBlcmltZW50Iiwic3ViIjoidnUtMDAwMSJ9.signature
+        "400":
+          description: The query parameter or request body is invalid.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_request
+        "415":
+          description: The request Content-Type is not application/json.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: unsupported_media_type
+        "500":
+          description: The server could not sign the JWT.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: internal_error
+  /protected:
+    get:
+      tags:
+        - Tokens
+      summary: Verify a JWT
+      description: |
+        Verifies the bearer token's structure, signature, algorithm, issuer,
+        audience, subject, issued-at time, and expiration. The request must not
+        have a body, and `alg` must match the algorithm used to issue the token.
+      operationId: verifyToken
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/Algorithm"
+      responses:
+        "200":
+          description: The JWT is valid.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerificationResponse"
+              example:
+                status: success
+        "400":
+          description: The query parameter is invalid or the request has a body.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_request
+        "401":
+          description: The bearer token is missing, malformed, invalid, or expired.
+          headers:
+            Cache-Control:
+              $ref: "#/components/headers/CacheControl"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: invalid_token
+components:
+  parameters:
+    Algorithm:
+      name: alg
+      in: query
+      required: true
+      description: Signing algorithm used to issue or verify the JWT.
+      schema:
+        type: string
+        enum:
+          - ES256
+          - ES384
+          - ES512
+          - ML-DSA-44
+          - ML-DSA-65
+          - ML-DSA-87
+      example: ES256
+  headers:
+    CacheControl:
+      description: Prevents storage of API responses.
+      schema:
+        type: string
+        const: no-store
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT returned by `POST /token`.
+  schemas:
+    IssueTokenRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sub
+      properties:
+        sub:
+          type: string
+          description: Subject configured for the benchmark (`vu-0001` through `vu-1000` by default).
+          pattern: "^vu-(000[1-9]|00[1-9][0-9]|0[1-9][0-9]{2}|1000)$"
+          examples:
+            - vu-0001
+    TokenResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          description: Signed compact-serialization JWT.
+          pattern: "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: ready
+    VerificationResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          const: success
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          enum:
+            - invalid_request
+            - invalid_token
+            - unsupported_media_type
+            - internal_error
