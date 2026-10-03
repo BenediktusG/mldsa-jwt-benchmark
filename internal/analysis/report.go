@@ -95,12 +95,5 @@ func writeReports(out string, runs []RunResult, summaries []Summary, comparisons
 	if err := writeCSV(filepath.Join(out, "exclusions.csv"), []string{"run_id", "reason"}, exclusionRows); err != nil {
 		return err
 	}
-	for _, operation := range []string{"issue", "verify"} {
-		for _, metric := range Metrics {
-			if err := MakeSVG(filepath.Join(out, operation+"_"+metric+".svg"), summaries, operation, metric); err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }

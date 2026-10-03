@@ -5,7 +5,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"mldsa-jwt-benchmark/internal/experiment"
@@ -47,9 +46,6 @@ func TestPhaseSelectionAndSummary(t *testing.T) {
 	}
 	if summaries[0].Stats["p99_ms"].SD != nil || summaries[0].Stats["p99_ms"].N != 1 {
 		t.Fatal("single repetition must not have sample standard deviation")
-	}
-	if err := MakeSVG(filepath.Join(t.TempDir(), "chart.svg"), summaries, "issue", "p99_ms"); err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -124,10 +120,17 @@ func TestProcessWritesReports(t *testing.T) {
 	if err != nil || result.EligibleRuns != 1 || result.Summaries != 1 {
 		t.Fatalf("pipeline failed: %+v %v", result, err)
 	}
-	for _, name := range []string{"per_run.csv", "summary.csv", "comparison.csv", "exclusions.csv", "issue_throughput_rps.svg"} {
+	for _, name := range []string{"per_run.csv", "summary.csv", "comparison.csv", "exclusions.csv"} {
 		if _, err := os.Stat(filepath.Join(out, name)); err != nil {
 			t.Fatal(err)
 		}
+	}
+	entries, err := os.ReadDir(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 4 {
+		t.Fatalf("processed output contains %d files, want 4 CSV files", len(entries))
 	}
 	assertContents := func(name, want string) {
 		t.Helper()
@@ -145,11 +148,4 @@ func TestProcessWritesReports(t *testing.T) {
 		"issue,1,ES256,1,100,200,1,0.016666666666666666,,,1,10,,,1,10,,\n")
 	assertContents("comparison.csv", "")
 	assertContents("exclusions.csv", "")
-	svg, err := os.ReadFile(filepath.Join(out, "issue_throughput_rps.svg"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(svg), "issue: throughput_rps") || !strings.Contains(string(svg), "ES256") {
-		t.Fatal("generated SVG does not contain the expected operation, metric, and algorithm")
-	}
 }

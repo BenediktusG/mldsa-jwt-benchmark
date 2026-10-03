@@ -5,10 +5,17 @@ const alg = __ENV.ALG;
 const operation = __ENV.OPERATION;
 const base = __ENV.BASE_URL;
 const runId = __ENV.RUN_ID;
-const token = __ENV.TOKEN;
 const metricsPath = __ENV.METRICS_PATH;
+const token = __ENV.TOKEN;
 
-if (!alg || !base || !runId || !metricsPath || !['issue', 'verify'].includes(operation) || (operation === 'verify' && !token)) {
+if (
+  !alg
+  || !['issue', 'verify'].includes(operation)
+  || !base
+  || !runId
+  || !metricsPath
+  || (operation === 'verify' && !token)
+) {
   throw new Error('invalid smoke-test configuration');
 }
 
@@ -24,6 +31,23 @@ export const options = {
   summaryTrendStats: ['avg', 'p(99)'],
 };
 
+function responseIsSuccessful(response) {
+  if (response.status !== 200) {
+    return false;
+  }
+
+  try {
+    const body = response.json();
+    if (operation === 'issue') {
+      const tokenParts = typeof body.token === 'string' ? body.token.split('.') : [];
+      return tokenParts.length === 3 && tokenParts.every(Boolean);
+    }
+    return body.status === 'success';
+  } catch (_) {
+    return false;
+  }
+}
+
 export default function () {
   const measureStart = Date.now() - 1;
   const measureEnd = measureStart + 60000;
@@ -34,28 +58,30 @@ export default function () {
     grace_end_ms: measureEnd + 30000,
   })}`);
 
-  const start = Date.now();
-  const response = operation === 'issue'
-    ? http.post(`${base}/token?alg=${alg}`, JSON.stringify({ sub: 'vu-0001' }), {
+  let start;
+  let response;
+  if (operation === 'issue') {
+    const body = JSON.stringify({ sub: 'vu-0001' });
+    start = Date.now();
+    response = http.post(`${base}/token?alg=${alg}`, body, {
       headers: { 'Content-Type': 'application/json' },
-    })
-    : http.get(`${base}/protected?alg=${alg}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      timeout: '30s',
     });
-  const end = Date.now();
-
-  let success = response.status === 200;
-  if (success) {
-    try {
-      const body = response.json();
-      success = operation === 'issue'
-        ? typeof body.token === 'string' && body.token.split('.').length === 3
-        : body.status === 'success';
-    } catch (_) {
-      success = false;
-    }
+  } else {
+    const authorization = `Bearer ${token}`;
+    start = Date.now();
+    response = http.get(`${base}/protected?alg=${alg}`, {
+      headers: { Authorization: authorization },
+      timeout: '30s',
+    });
   }
-  if (!success) throw new Error(`smoke request failed with HTTP ${response.status}`);
+
+  const end = Date.now();
+  const success = responseIsSuccessful(response);
+
+  if (!success) {
+    throw new Error(`smoke request failed with HTTP ${response.status}`);
+  }
 
   successfulStartedInWindow.add(1);
   successfulDuration.add(end - start);
@@ -63,18 +89,20 @@ export default function () {
 }
 
 export function handleSummary(data) {
+  const completed = data.metrics.successful_in_window?.values.count || 0;
+  const started = data.metrics.successful_started_in_window?.values.count || 0;
   const duration = data.metrics.successful_duration_ms?.values || {};
-  return {
-    [metricsPath]: `${JSON.stringify({
-      schema_version: 1,
-      run_id: runId,
-      alg,
-      operation,
-      target_vu: 1,
-      successful_in_window: data.metrics.successful_in_window?.values.count || 0,
-      successful_started_in_window: data.metrics.successful_started_in_window?.values.count || 0,
-      mean_ms: duration.avg ?? null,
-      p99_ms: duration['p(99)'] ?? null,
-    }, null, 2)}\n`,
+  const artifact = {
+    schema_version: 1,
+    run_id: runId,
+    alg,
+    operation,
+    target_vu: 1,
+    successful_in_window: completed,
+    successful_started_in_window: started,
+    mean_ms: duration.avg ?? null,
+    p99_ms: duration['p(99)'] ?? null,
   };
+
+  return { [metricsPath]: `${JSON.stringify(artifact, null, 2)}\n` };
 }

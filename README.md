@@ -8,7 +8,7 @@ Proyek ini mengimplementasikan layanan HTTP stateless untuk ES256, ES384, ES512,
 - `cmd/keygen`, `config/`, `keys/`: profil tetap dan enam pasangan kunci lokal. Berkas di `keys/` tidak boleh dipublikasikan.
 - `load/scenario.js`: fase k6 15 detik ramp-up, 60 detik pengukuran, dan maksimal 30 detik penyelesaian.
 - `runner/schedule.json`, `cmd/experiment`, `internal/experiment`: urutan berurutan 240 pelaksanaan dan orkestrasi Docker/k6 dalam Go.
-- `cmd/analyze`, `internal/analysis`: validasi ringkasan metrik per pelaksanaan, tabel, perbandingan, dan SVG dalam Go.
+- `cmd/analyze`, `internal/analysis`: validasi ringkasan metrik per pelaksanaan, tabel, dan perbandingan dalam Go.
 - `cmd/validate`: validasi dan pencatatan hasil pemeriksaan dalam Go.
 - `results/raw/`: ringkasan metrik k6, log kecil, serta metadata asli per pelaksanaan; `results/processed/`: keluaran yang dapat dibuat ulang.
 
@@ -66,7 +66,7 @@ Jadwal memakai urutan tetap: algoritma, operasi, target VU `1`, `10`, `100`, dan
 go run ./cmd/analyze
 ```
 
-`per_run.csv` memuat throughput, mean, dan P99 setiap pelaksanaan. `summary.csv` memuat rata-rata, simpangan baku sampel, koefisien variasi, dan jumlah nilai tersedia. `comparison.csv` memuat pasangan ML-DSA terhadap ECDSA dengan selisih relatif terhadap ECDSA. `exclusions.csv` memuat alasan pengeluaran yang dicatat. Enam grafik SVG memisahkan operasi dan metrik, memakai sumbu VU logaritmik dan error bar simpangan baku antar-pengulangan.
+`per_run.csv` memuat throughput, mean, dan P99 setiap pelaksanaan. `summary.csv` memuat rata-rata, simpangan baku sampel, koefisien variasi, dan jumlah nilai tersedia. `comparison.csv` memuat pasangan ML-DSA terhadap ECDSA dengan selisih relatif terhadap ECDSA. `exclusions.csv` memuat alasan pengeluaran yang dicatat.
 
 Throughput menghitung keberhasilan yang **dimulai dan selesai** dalam jendela 60 detik, dibagi 60. Mean dan P99 memakai keberhasilan yang **dimulai** dalam jendela; respons yang selesai saat fase penyelesaian tetap masuk. k6 menghitung mean dan P99 pada akhir setiap pelaksanaan, lalu menyimpan hanya jumlah keberhasilan dan kedua ringkasan latensi dalam berkas `.metrics.json`. Pendekatan ini menghindari CSV deret waktu yang sangat besar; permintaan gagal tidak masuk tiga metrik utama.
 
