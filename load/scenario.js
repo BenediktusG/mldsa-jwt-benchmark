@@ -1,4 +1,5 @@
 import http from 'k6/http';
+import { SharedArray } from 'k6/data';
 import exec from 'k6/execution';
 import { Counter, Trend } from 'k6/metrics';
 
@@ -10,7 +11,9 @@ const metricsPath = __ENV.METRICS_PATH;
 const base = __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const subjectPrefix = __ENV.SUBJECT_PREFIX || 'vu-';
 const subjectWidth = Number(__ENV.SUBJECT_WIDTH || '4');
-const tokens = operation === 'verify' ? JSON.parse(open(__ENV.TOKENS_FILE)) : null;
+const tokens = operation === 'verify'
+  ? new SharedArray(`verification-tokens-${runId}`, () => JSON.parse(open(__ENV.TOKENS_FILE)))
+  : null;
 
 if (!['issue', 'verify'].includes(operation) || ![1, 10, 100, 1000].includes(target) || !alg || !runId || !metricsPath || (tokens && tokens.length !== target)) {
   throw new Error('invalid scenario configuration');
