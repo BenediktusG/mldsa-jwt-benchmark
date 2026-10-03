@@ -1,0 +1,14 @@
+name: mldsa-jwt-benchmark
+
+services:
+  jwt:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - ./keys:/keys:ro
+    cpuset: ${SERVER_CPUSET:?Set SERVER_CPUSET after verifying physical cores}
+    mem_limit: 1g
+    environment:
+      GOMAXPROCS: "4"
+      GODEBUG: "fips140=off"

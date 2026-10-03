@@ -1,0 +1,7 @@
+keys/*
+!keys/.gitkeep
+results/raw/*
+!results/raw/.gitkeep
+results/processed/*
+!results/processed/.gitkeep
+*.test

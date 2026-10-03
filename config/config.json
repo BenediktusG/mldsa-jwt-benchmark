@@ -1,0 +1,9 @@
+{
+  "issuer": "skripsi-jwt-experiment",
+  "audience": "skripsi-protected-resource",
+  "subject_prefix": "vu-",
+  "subject_count": 1000,
+  "subject_width": 4,
+  "key_dir": "/keys",
+  "listen": ":8080"
+}
