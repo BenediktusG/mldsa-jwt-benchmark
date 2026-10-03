@@ -53,6 +53,10 @@ func ParseCPUSet(value string) (map[int]bool, error) {
 }
 
 func CheckServerCPUAllocation(serverValue string) error {
+	return checkServerCPUAllocation(serverValue, "/sys/devices/system/cpu", "/proc/cmdline")
+}
+
+func checkServerCPUAllocation(serverValue, cpuRoot, cmdlinePath string) error {
 	server, err := ParseCPUSet(serverValue)
 	if err != nil {
 		return err
@@ -60,31 +64,59 @@ func CheckServerCPUAllocation(serverValue string) error {
 	if len(server) != 4 {
 		return fmt.Errorf("server allocation needs exactly four logical CPUs")
 	}
-	status, err := os.ReadFile("/proc/self/status")
+	onlineData, err := os.ReadFile(filepath.Join(cpuRoot, "online"))
 	if err != nil {
 		return err
 	}
-	var available map[int]bool
-	for _, line := range strings.Split(string(status), "\n") {
-		if strings.HasPrefix(line, "Cpus_allowed_list:") {
-			available, err = ParseCPUSet(strings.TrimSpace(strings.TrimPrefix(line, "Cpus_allowed_list:")))
-			if err != nil {
-				return err
-			}
-			break
-		}
+	online, err := ParseCPUSet(strings.TrimSpace(string(onlineData)))
+	if err != nil {
+		return fmt.Errorf("parse online CPUs: %w", err)
 	}
-	if available == nil {
-		return fmt.Errorf("CPU affinity unavailable")
+	isolatedData, err := os.ReadFile(filepath.Join(cpuRoot, "isolated"))
+	if err != nil {
+		return err
+	}
+	isolatedValue := strings.TrimSpace(string(isolatedData))
+	if isolatedValue == "" {
+		return fmt.Errorf("no scheduler-domain-isolated CPUs; configure isolcpus=domain,<cpu-list> and reboot")
+	}
+	isolated, err := ParseCPUSet(isolatedValue)
+	if err != nil {
+		return fmt.Errorf("parse isolated CPUs: %w", err)
 	}
 	for cpu := range server {
-		if !available[cpu] {
-			return fmt.Errorf("server CPU %d is unavailable", cpu)
+		if !online[cpu] {
+			return fmt.Errorf("server CPU %d is offline", cpu)
+		}
+		if !isolated[cpu] {
+			return fmt.Errorf("server CPU %d is not scheduler-domain isolated", cpu)
+		}
+	}
+	cmdline, err := os.ReadFile(cmdlinePath)
+	if err != nil {
+		return err
+	}
+	irqAffinity, err := kernelArgument(cmdline, "irqaffinity")
+	if err != nil {
+		return err
+	}
+	irqCPUs, err := ParseCPUSet(irqAffinity)
+	if err != nil {
+		return fmt.Errorf("parse irqaffinity: %w", err)
+	}
+	for cpu := range server {
+		if irqCPUs[cpu] {
+			return fmt.Errorf("irqaffinity includes server CPU %d", cpu)
+		}
+	}
+	for cpu := range online {
+		if !server[cpu] && !irqCPUs[cpu] {
+			return fmt.Errorf("irqaffinity excludes housekeeping CPU %d", cpu)
 		}
 	}
 	cores := make(map[string]int)
 	for cpu := range server {
-		root := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/topology", cpu)
+		root := filepath.Join(cpuRoot, fmt.Sprintf("cpu%d/topology", cpu))
 		packageID, err := os.ReadFile(filepath.Join(root, "physical_package_id"))
 		if err != nil {
 			return err
@@ -96,6 +128,49 @@ func CheckServerCPUAllocation(serverValue string) error {
 		cores[strings.TrimSpace(string(packageID))+"/"+strings.TrimSpace(string(coreID))]++
 	}
 	return validateServerCoreThreads(cores)
+}
+
+func kernelArgument(cmdline []byte, name string) (string, error) {
+	prefix := name + "="
+	value := ""
+	for _, argument := range strings.Fields(string(cmdline)) {
+		if strings.HasPrefix(argument, prefix) {
+			value = strings.TrimPrefix(argument, prefix)
+		}
+	}
+	if value == "" {
+		return "", fmt.Errorf("kernel command line is missing %s=<cpu-list>", name)
+	}
+	return value, nil
+}
+
+func currentKernelArgument(name string) (string, error) {
+	cmdline, err := os.ReadFile("/proc/cmdline")
+	if err != nil {
+		return "", err
+	}
+	return kernelArgument(cmdline, name)
+}
+
+func cpuAllowedList(status []byte) (string, error) {
+	for _, line := range strings.Split(string(status), "\n") {
+		if strings.HasPrefix(line, "Cpus_allowed_list:") {
+			value := strings.TrimSpace(strings.TrimPrefix(line, "Cpus_allowed_list:"))
+			if _, err := ParseCPUSet(value); err != nil {
+				return "", err
+			}
+			return value, nil
+		}
+	}
+	return "", fmt.Errorf("CPU affinity unavailable")
+}
+
+func currentCPUAllowedList() (string, error) {
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return "", err
+	}
+	return cpuAllowedList(status)
 }
 
 func validateServerCoreThreads(cores map[string]int) error {

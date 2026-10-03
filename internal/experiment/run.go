@@ -107,6 +107,14 @@ func safeCommand(root string, name string, args ...string) string {
 }
 
 func environmentInfo(root, serverCPUs string) (map[string]string, error) {
+	k6CPUAffinity, err := currentCPUAllowedList()
+	if err != nil {
+		return nil, err
+	}
+	irqAffinity, err := currentKernelArgument("irqaffinity")
+	if err != nil {
+		return nil, err
+	}
 	configHash, err := FileHash(filepath.Join(root, "config/config.json"))
 	if err != nil {
 		return nil, err
@@ -132,7 +140,8 @@ func environmentInfo(root, serverCPUs string) (map[string]string, error) {
 		"power_profile":   safeCommand(root, "powerprofilesctl", "get"),
 		"git_revision":    safeCommand(root, "git", "rev-parse", "HEAD"),
 		"server_cpuset":   serverCPUs,
-		"k6_cpu_affinity": "unrestricted by experiment runner",
+		"k6_cpu_affinity": k6CPUAffinity,
+		"irq_affinity":    irqAffinity,
 		"memory_limit":    "1g",
 		"gomaxprocs":      "4",
 		"godebug":         "fips140=off",

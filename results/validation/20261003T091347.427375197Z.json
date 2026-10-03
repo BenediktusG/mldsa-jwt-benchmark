@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-10-03T09:13:45.392654334Z",
+  "source_sha256": "70fa63b215be9f4e9b1f118fc27a7021d003c49cca74af24ff97d204b5c0b361",
+  "config_sha256": "a95ca3d34a7b35569c211917d90ea64c547acf3cca20c8d7be010c9c4eb3a1ad",
+  "go_version": "go version go1.27.1 linux/amd64\n",
+  "checks": [
+    {
+      "command": [
+        "go",
+        "test",
+        "-race",
+        "./..."
+      ],
+      "exit_code": 0,
+      "stdout": "?   \tmldsa-jwt-benchmark/cmd/analyze\t[no test files]\n?   \tmldsa-jwt-benchmark/cmd/experiment\t[no test files]\n?   \tmldsa-jwt-benchmark/cmd/keygen\t[no test files]\n?   \tmldsa-jwt-benchmark/cmd/server\t[no test files]\n?   \tmldsa-jwt-benchmark/cmd/validate\t[no test files]\nok  \tmldsa-jwt-benchmark/internal/analysis\t(cached)\nok  \tmldsa-jwt-benchmark/internal/experiment\t1.039s\nok  \tmldsa-jwt-benchmark/internal/profile\t(cached)\nok  \tmldsa-jwt-benchmark/internal/server\t(cached)\nok  \tmldsa-jwt-benchmark/internal/signing\t(cached)\nok  \tmldsa-jwt-benchmark/internal/token\t(cached)\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "go",
+        "vet",
+        "./..."
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "k6",
+        "inspect",
+        "-e",
+        "ALG=ES256",
+        "-e",
+        "OPERATION=issue",
+        "-e",
+        "TARGET_VU=1",
+        "-e",
+        "RUN_ID=validation",
+        "load/scenario.js"
+      ],
+      "exit_code": 0,
+      "stdout": "{\n  \"paused\": null,\n  \"vus\": null,\n  \"duration\": null,\n  \"iterations\": null,\n  \"stages\": null,\n  \"scenarios\": {\n    \"experiment\": {\n      \"executor\": \"ramping-vus\",\n      \"startTime\": null,\n      \"gracefulStop\": \"30s\",\n      \"env\": null,\n      \"exec\": null,\n      \"tags\": null,\n      \"startVUs\": 0,\n      \"stages\": [\n        {\n          \"duration\": \"15s\",\n          \"target\": 1\n        },\n        {\n          \"duration\": \"1m0s\",\n          \"target\": 1\n        }\n      ],\n      \"gracefulRampDown\": null\n    }\n  },\n  \"executionSegment\": null,\n  \"executionSegmentSequence\": null,\n  \"noSetup\": null,\n  \"setupTimeout\": null,\n  \"noTeardown\": null,\n  \"teardownTimeout\": null,\n  \"handleSummaryTimeout\": null,\n  \"rps\": null,\n  \"dns\": {\n    \"ttl\": null,\n    \"select\": null,\n    \"policy\": null\n  },\n  \"maxRedirects\": null,\n  \"userAgent\": null,\n  \"batch\": null,\n  \"batchPerHost\": null,\n  \"httpDebug\": null,\n  \"insecureSkipTLSVerify\": null,\n  \"tlsCipherSuites\": null,\n  \"tlsVersion\": null,\n  \"tlsAuth\": null,\n  \"tlsAIAFetch\": null,\n  \"throw\": null,\n  \"thresholds\": {},\n  \"blacklistIPs\": null,\n  \"blockHostnames\": null,\n  \"hosts\": null,\n  \"noConnectionReuse\": false,\n  \"noVUConnectionReuse\": null,\n  \"minIterationDuration\": null,\n  \"ext\": null,\n  \"summaryTrendStats\": [\n    \"avg\",\n    \"p(99)\"\n  ],\n  \"summaryTimeUnit\": null,\n  \"systemTags\": null,\n  \"tags\": null,\n  \"metricSamplesBufferSize\": null,\n  \"noCookiesReset\": null,\n  \"discardResponseBodies\": false,\n  \"features\": null\n}",
+      "stderr": ""
+    }
+  ]
+}
