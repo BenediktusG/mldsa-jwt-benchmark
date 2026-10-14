@@ -440,8 +440,9 @@ func runOne(options RunOptions, plan Plan, index int, config profile.Config, env
 		k6Env := append(os.Environ(),
 			"ALG="+row.Alg, "OPERATION="+row.Operation, "TARGET_VU="+strconv.Itoa(row.TargetVU),
 			"RUN_ID="+runID, "BASE_URL="+options.BaseURL, "TOKENS_FILE="+tokenFile.Name(), "METRICS_PATH="+metricsPath,
-			"SUBJECT_PREFIX="+config.SubjectPrefix, "SUBJECT_WIDTH="+strconv.Itoa(config.SubjectWidth))
-		k6Err := runCommand(options.Root, k6Env, logFile, "k6", "run", "--quiet", "--log-format", "raw", "load/scenario.js")
+			"SUBJECT_PREFIX="+config.SubjectPrefix, "SUBJECT_WIDTH="+strconv.Itoa(config.SubjectWidth),
+			"K6_NO_USAGE_REPORT=true")
+		k6Err := runCommand(options.Root, k6Env, logFile, "k6", "run", "--quiet", "--no-usage-report", "--log-format", "raw", "load/scenario.js")
 		if err := logFile.Close(); err != nil && k6Err == nil {
 			k6Err = err
 		}

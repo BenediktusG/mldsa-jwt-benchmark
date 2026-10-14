@@ -108,7 +108,7 @@ func TestDockerK6AnalysisSmoke(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		args := []string{"run", "--quiet", "--log-format", "raw",
+		args := []string{"run", "--quiet", "--no-usage-report", "--log-format", "raw",
 			"-e", "ALG=ES256", "-e", "OPERATION=" + operation, "-e", "RUN_ID=" + runID,
 			"-e", "BASE_URL=" + baseURL, "-e", "METRICS_PATH=" + metricsPath}
 		if operation == "verify" {
@@ -117,6 +117,7 @@ func TestDockerK6AnalysisSmoke(t *testing.T) {
 		args = append(args, "load/smoke.js")
 		cmd := exec.Command("k6", args...)
 		cmd.Dir = root
+		cmd.Env = append(os.Environ(), "K6_NO_USAGE_REPORT=true")
 		cmd.Stdout, cmd.Stderr = logFile, logFile
 		k6Err := cmd.Run()
 		closeErr := logFile.Close()

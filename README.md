@@ -52,16 +52,16 @@ Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Bangun image serv
 SERVER_CPUSET=1,2,3,4 docker compose build jwt
 ```
 
-Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
+Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core (orkestrator secara otomatis menyetel `K6_NO_USAGE_REPORT=true` dan flag `--no-usage-report` untuk mencegah *background noise*):
 
 ```sh
 go run ./cmd/experiment run --server-cpus 1,2,3,4
 ```
 
-Untuk menjalankan eksperimen sepenuhnya secara **offline** (guna mencegah gangguan interupsi jaringan latar belakang pada CPU pinning), nonaktifkan Docker BuildKit agar orkestrator langsung menggunakan cache lokal tanpa mencoba menghubungi Docker Hub untuk memeriksa pembaruan tag base image. Setel juga `K6_NO_USAGE_REPORT=true` agar k6 tidak mengirim telemetri di latar belakang:
+Untuk menjalankan eksperimen sepenuhnya secara **offline** (guna mencegah gangguan interupsi jaringan latar belakang pada CPU pinning), nonaktifkan Docker BuildKit (`DOCKER_BUILDKIT=0`) agar orkestrator langsung menggunakan cache lokal tanpa mencoba menghubungi Docker Hub untuk memeriksa pembaruan tag base image:
 
 ```sh
-DOCKER_BUILDKIT=0 K6_NO_USAGE_REPORT=true go run ./cmd/experiment run --server-cpus 1,2,3,4
+DOCKER_BUILDKIT=0 go run ./cmd/experiment run --server-cpus 1,2,3,4
 ```
 
 CPU server wajib masuk dalam set isolasi domain penjadwal kernel dan dikeluarkan dari afinitas IRQ bawaan, misalnya melalui parameter boot `isolcpus=domain,managed_irq,nohz,1-4 irqaffinity=0,5-17`. Validasi alokasi memeriksa bahwa CPU yang dipilih sedang online, terisolasi, tidak masuk `irqaffinity`, dan membentuk dua core fisik lengkap; seluruh CPU housekeeping online wajib masuk `irqaffinity`. Kontainer server ditempatkan secara eksplisit pada CPU `1-4` oleh `cpuset` Docker, sedangkan orkestrator dan k6 tanpa pinning eksplisit tetap dijadwalkan pada CPU housekeeping.
