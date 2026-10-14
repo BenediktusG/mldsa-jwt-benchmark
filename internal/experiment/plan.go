@@ -12,6 +12,11 @@ import (
 var Operations = []string{"issue", "verify"}
 var VUs = []int{1, 10, 100, 1000}
 
+const (
+	RoundsPerScenario = 20
+	TotalRuns         = 960
+)
+
 type Scenario struct {
 	Round     int    `json:"round"`
 	Alg       string `json:"alg"`
@@ -24,11 +29,11 @@ type Plan struct {
 }
 
 func GeneratePlan() Plan {
-	plan := Plan{Runs: make([]Scenario, 0, 240)}
+	plan := Plan{Runs: make([]Scenario, 0, TotalRuns)}
 	for _, alg := range profile.Algorithms {
 		for _, op := range Operations {
 			for _, vu := range VUs {
-				for round := 1; round <= 5; round++ {
+				for round := 1; round <= RoundsPerScenario; round++ {
 					plan.Runs = append(plan.Runs, Scenario{Round: round, Alg: alg, Operation: op, TargetVU: vu})
 				}
 			}
@@ -38,12 +43,12 @@ func GeneratePlan() Plan {
 }
 
 func (p Plan) Validate() error {
-	if len(p.Runs) != 240 {
-		return fmt.Errorf("schedule must have 240 runs, got %d", len(p.Runs))
+	if len(p.Runs) != TotalRuns {
+		return fmt.Errorf("schedule must have %d runs, got %d", TotalRuns, len(p.Runs))
 	}
-	seen := make(map[string]bool, 240)
+	seen := make(map[string]bool, TotalRuns)
 	for index, run := range p.Runs {
-		if run.Round < 1 || run.Round > 5 || !profile.Supported(run.Alg) || !contains(Operations, run.Operation) || !containsInt(VUs, run.TargetVU) {
+		if run.Round < 1 || run.Round > RoundsPerScenario || !profile.Supported(run.Alg) || !contains(Operations, run.Operation) || !containsInt(VUs, run.TargetVU) {
 			return fmt.Errorf("invalid scenario at index %d", index)
 		}
 		key := strconv.Itoa(run.Round) + "/" + run.Alg + "/" + run.Operation + "/" + strconv.Itoa(run.TargetVU)

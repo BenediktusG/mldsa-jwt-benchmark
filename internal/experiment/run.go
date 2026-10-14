@@ -538,7 +538,7 @@ func Run(options RunOptions) error {
 	environment["server_image_id"] = imageID
 	for index := options.StartIndex; index < options.StartIndex+options.Limit; index++ {
 		row := plan.Runs[index]
-		fmt.Printf("[%d/240] round=%d alg=%s operation=%s VU=%d\n", index+1, row.Round, row.Alg, row.Operation, row.TargetVU)
+		fmt.Printf("[%d/%d] round=%d alg=%s operation=%s VU=%d\n", index+1, len(plan.Runs), row.Round, row.Alg, row.Operation, row.TargetVU)
 		status, err := runOne(options, plan, index, config, environment, keyHashes)
 		if err != nil {
 			return fmt.Errorf("run %d needs review (%s): %w", index+1, status, err)

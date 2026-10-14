@@ -58,10 +58,10 @@ func run() error {
 		return nil
 	case "run":
 		flags := flag.NewFlagSet("run", flag.ContinueOnError)
-		schedule := flags.String("schedule", "runner/schedule.json", "240-run schedule")
+		schedule := flags.String("schedule", "runner/schedule.json", "960-run schedule")
 		serverCPUs := flags.String("server-cpus", "", "four logical CPUs from two physical cores")
 		startIndex := flags.Int("start-index", 0, "zero-based first schedule index")
-		limit := flags.Int("limit", 240, "number of runs")
+		limit := flags.Int("limit", experiment.TotalRuns, "number of runs")
 		baseURL := flags.String("base-url", "http://127.0.0.1:8080", "server URL")
 		if err := flags.Parse(os.Args[2:]); err != nil {
 			return err

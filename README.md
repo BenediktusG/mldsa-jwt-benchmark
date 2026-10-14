@@ -7,7 +7,7 @@ Proyek ini mengimplementasikan layanan HTTP stateless untuk ES256, ES384, ES512,
 - `cmd/server`, `internal/`: server, profil JWT, kunci, dan adaptor tanda tangan.
 - `cmd/keygen`, `config/`, `keys/`: profil tetap dan enam pasangan kunci lokal. Berkas di `keys/` tidak boleh dipublikasikan.
 - `load/scenario.js`: fase k6 15 detik ramp-up, 60 detik pengukuran, dan maksimal 30 detik penyelesaian.
-- `runner/schedule.json`, `cmd/experiment`, `internal/experiment`: urutan berurutan 240 pelaksanaan dan orkestrasi Docker/k6 dalam Go.
+- `runner/schedule.json`, `cmd/experiment`, `internal/experiment`: urutan berurutan 960 pelaksanaan dan orkestrasi Docker/k6 dalam Go.
 - `cmd/analyze`, `internal/analysis`: validasi ringkasan metrik per pelaksanaan, tabel, dan perbandingan dalam Go.
 - `cmd/validate`: validasi dan pencatatan hasil pemeriksaan dalam Go.
 - `results/raw/`: ringkasan metrik k6, log kecil, serta metadata asli per pelaksanaan; `results/processed/`: keluaran yang dapat dibuat ulang.
@@ -44,7 +44,7 @@ go run ./cmd/server -config config/config.json -keys keys
 
 `POST /token?alg=ES256` menerima `{"sub":"vu-0001"}` dengan `Content-Type: application/json`. `GET /protected?alg=ES256` menerima `Authorization: Bearer <JWT>`. `GET /healthz` hanya untuk pemeriksaan kesiapan orkestrator. Nilai `sub` yang sah adalah `vu-0001` hingga `vu-1000` dengan panjang byte tetap. Ukuran maksimum header HTTP adalah 16 KiB dan badan `/token` adalah 1024 byte, sama untuk semua algoritma. Layanan menggunakan koneksi HTTP persisten pada loopback melalui port Docker 8080, tanpa TLS atau proxy.
 
-## Menjalankan matriks 240 pelaksanaan
+## Menjalankan matriks 960 pelaksanaan
 
 Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
 
@@ -58,7 +58,7 @@ Penjadwal memvalidasi bahwa alokasi server berisi tepat empat CPU logis, terbagi
 
 Untuk melanjutkan bagian tertentu dari jadwal, pakai `--start-index` (mulai dari 0) dan `--limit`. Jangan menimpa artefak mentah. Jika suatu pelaksanaan harus dikeluarkan, buat `runner/exclusions.json` sebagai objek `{"run_id":"alasan terdokumentasi"}`, lalu jalankan ulang indeks yang sama. Analisis menolak dua pelaksanaan sah pada indeks jadwal yang sama. Nilai rendah karena beban sistem bukan alasan pengeluaran.
 
-Jadwal memakai urutan tetap: algoritma, operasi, target VU `1`, `10`, `100`, dan `1000`, lalu putaran `1` sampai `5`. Dengan demikian, setiap skenario dijalankan lima kali secara berurutan sebelum beralih ke skenario berikutnya. Jadwal tidak menggunakan seed atau pengacakan. Untuk membuat berkas jadwal baru, jalankan `go run ./cmd/experiment plan --output <berkas-baru>`, lalu pasang `--schedule <berkas-baru>` saat menjalankan.
+Jadwal memakai urutan tetap: algoritma, operasi, target VU `1`, `10`, `100`, dan `1000`, lalu putaran `1` sampai `20`. Dengan demikian, setiap skenario dijalankan 20 kali secara berurutan sebelum beralih ke skenario berikutnya. Jadwal tidak menggunakan seed atau pengacakan. Untuk membuat berkas jadwal baru, jalankan `go run ./cmd/experiment plan --output <berkas-baru>`, lalu pasang `--schedule <berkas-baru>` saat menjalankan.
 
 ## Mengolah data
 
@@ -74,4 +74,4 @@ Metadata merekam versi alat, hash sumber dan konfigurasi, ID image Docker server
 
 ## Batas pelaksanaan saat penyusunan
 
-Pengujian Go dengan race detector, pemeriksaan sintaks k6, dan penerbitan/verifikasi HTTP untuk keenam algoritma telah lulus. Docker daemon tidak tersedia saat proyek disusun; kontainer dan 240 pelaksanaan penelitian belum dijalankan. Data hasil penelitian belum dihasilkan.
+Pengujian Go dengan race detector, pemeriksaan sintaks k6, dan penerbitan/verifikasi HTTP untuk keenam algoritma telah lulus. Docker daemon tidak tersedia saat proyek disusun; kontainer dan 960 pelaksanaan penelitian belum dijalankan. Data hasil penelitian belum dihasilkan.
