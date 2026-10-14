@@ -46,10 +46,22 @@ go run ./cmd/server -config config/config.json -keys keys
 
 ## Menjalankan matriks 960 pelaksanaan
 
-Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
+Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Bangun image server terlebih dahulu ketika mesin inang terhubung ke internet agar base image tersimpan di cache lokal:
+
+```sh
+docker compose build jwt
+```
+
+Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
 
 ```sh
 go run ./cmd/experiment run --server-cpus 1,2,3,4
+```
+
+Untuk menjalankan eksperimen sepenuhnya secara **offline** (guna mencegah gangguan interupsi jaringan latar belakang pada CPU pinning), nonaktifkan Docker BuildKit agar orkestrator langsung menggunakan cache lokal tanpa mencoba menghubungi Docker Hub untuk memeriksa pembaruan tag base image. Setel juga `K6_NO_USAGE_REPORT=true` agar k6 tidak mengirim telemetri di latar belakang:
+
+```sh
+DOCKER_BUILDKIT=0 K6_NO_USAGE_REPORT=true go run ./cmd/experiment run --server-cpus 1,2,3,4
 ```
 
 CPU server wajib masuk dalam set isolasi domain penjadwal kernel dan dikeluarkan dari afinitas IRQ bawaan, misalnya melalui parameter boot `isolcpus=domain,managed_irq,nohz,1-4 irqaffinity=0,5-17`. Validasi alokasi memeriksa bahwa CPU yang dipilih sedang online, terisolasi, tidak masuk `irqaffinity`, dan membentuk dua core fisik lengkap; seluruh CPU housekeeping online wajib masuk `irqaffinity`. Kontainer server ditempatkan secara eksplisit pada CPU `1-4` oleh `cpuset` Docker, sedangkan orkestrator dan k6 tanpa pinning eksplisit tetap dijadwalkan pada CPU housekeeping.
@@ -72,6 +84,3 @@ Throughput menghitung keberhasilan yang **dimulai dan selesai** dalam jendela 60
 
 Metadata merekam versi alat, hash sumber dan konfigurasi, ID image Docker server, topologi CPU, profil daya bila tersedia, alokasi sumber daya, ukuran JWT/payload, jumlah token persiapan, batas fase, dan jumlah sukses. Sebelum setiap pelaksanaan, runner memastikan ID image server serta berkas host yang masih digunakan saat runtime (`compose.yaml`, `load/scenario.js`, jadwal, dan kunci yang di-mount) tidak berubah. Kode Go yang sudah dikompilasi ke dalam image tidak di-hash ulang pada setiap pelaksanaan. Identitas JWT dan kunci privat tidak ditulis ke metadata atau ringkasan metrik. Berkas token persiapan dibuat sementara dengan izin `0600` dan dihapus setelah k6 selesai.
 
-## Batas pelaksanaan saat penyusunan
-
-Pengujian Go dengan race detector, pemeriksaan sintaks k6, dan penerbitan/verifikasi HTTP untuk keenam algoritma telah lulus. Docker daemon tidak tersedia saat proyek disusun; kontainer dan 960 pelaksanaan penelitian belum dijalankan. Data hasil penelitian belum dihasilkan.
