@@ -528,12 +528,15 @@ func Run(options RunOptions) error {
 		}
 	}
 	composeEnv := append(os.Environ(), "SERVER_CPUSET="+options.ServerCPUs)
-	if err := runCommand(options.Root, composeEnv, os.Stdout, "docker", "compose", "build", "jwt"); err != nil {
-		return err
-	}
 	imageName, imageID, err := composeImage(options.Root, composeEnv)
-	if err != nil {
-		return fmt.Errorf("inspect built server image: %w", err)
+	if err != nil || os.Getenv("REBUILD_IMAGE") == "1" {
+		if err := runCommand(options.Root, composeEnv, os.Stdout, "docker", "compose", "build", "jwt"); err != nil {
+			return err
+		}
+		imageName, imageID, err = composeImage(options.Root, composeEnv)
+		if err != nil {
+			return fmt.Errorf("inspect built server image: %w", err)
+		}
 	}
 	environment["server_image"] = imageName
 	environment["server_image_id"] = imageID
