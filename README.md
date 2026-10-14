@@ -49,7 +49,7 @@ go run ./cmd/server -config config/config.json -keys keys
 Pasang Docker dan k6 pada mesin inang. Hidupkan Docker daemon. Bangun image server terlebih dahulu ketika mesin inang terhubung ke internet agar base image tersimpan di cache lokal:
 
 ```sh
-docker compose build jwt
+SERVER_CPUSET=1,2,3,4 docker compose build jwt
 ```
 
 Periksa pemetaan CPU aktual dengan `lscpu -e=CPU,CORE,SOCKET,ONLINE,MAXMHZ` dan pilih keempat CPU logis yang merupakan dua thread dari masing-masing **dua Performance Core fisik yang berbeda**. Contoh berikut mengasumsikan pasangan thread `(1,2)` dan `(3,4)` telah diverifikasi berada pada dua Performance Core:
